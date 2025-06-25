@@ -1,0 +1,231 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NeuroForge AI Chatbot</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(120deg, #0f0c29, #302b63, #24243e);
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .tab-buttons {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .tab-buttons button {
+      background: rgba(0, 255, 255, 0.1);
+      border: 1px solid cyan;
+      color: cyan;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      backdrop-filter: blur(8px);
+    }
+    .tab-buttons button.active {
+      background: rgba(0, 255, 255, 0.3);
+    }
+    .tab {
+      display: none;
+      width: 100%;
+      max-width: 600px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 0 20px rgba(0,255,255,0.2);
+      backdrop-filter: blur(15px);
+    }
+    .tab.active {
+      display: block;
+    }
+    .chat-box {
+      height: 400px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .message {
+      padding: 10px;
+      border-radius: 12px;
+      max-width: 80%;
+      background: rgba(0, 255, 255, 0.1);
+      color: white;
+    }
+    .user { align-self: flex-end; background: rgba(0, 255, 255, 0.3); color: black; }
+    .bot { align-self: flex-start; background: rgba(255, 255, 255, 0.1); }
+    .input-area {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .input-area input {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      background: #1f1f2e;
+      color: white;
+    }
+    .input-area button {
+      background: cyan;
+      color: black;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    textarea, select {
+      width: 100%;
+      padding: 10px;
+      background: #1f1f2e;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      margin-bottom: 10px;
+    }
+    .memory-entry {
+      background: rgba(255,255,255,0.05);
+      padding: 10px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="tab-buttons">
+    <button onclick="showTab('chat')" class="active">Chat</button>
+    <button onclick="showTab('memory')">Memory</button>
+    <button onclick="showTab('settings')">Settings</button>
+  </div>  <div id="chat" class="tab active">
+    <div class="chat-box" id="chat-box"></div>
+    <div class="input-area">
+      <input type="text" id="user-input" placeholder="Type or speak..." />
+      <button onclick="sendMessage()">Send</button>
+      <button onclick="startListening()">🎙</button>
+    </div>
+  </div>  <div id="memory" class="tab">
+    <h3>Memory Viewer</h3>
+    <div id="memory-list"></div>
+  </div>  <div id="settings" class="tab">
+    <h3>Settings</h3>
+    <label>Bot Name:</label>
+    <input id="bot-name" type="text" value="NeuroForge" />
+    <label>Personality:</label>
+    <select id="personality">
+      <option value="neutral">Neutral</option>
+      <option value="funny">Funny</option>
+      <option value="wise">Wise</option>
+    </select>
+    <h4>Import Config</h4>
+    <input type="file" onchange="importMemory(event)" />
+    <h4>Export Memory</h4>
+    <button onclick="exportMemory()">Export .json</button>
+  </div>  <script>
+    const chatBox = document.getElementById("chat-box");
+    const memoryList = document.getElementById("memory-list");
+    const synth = window.speechSynthesis;
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "en-US";
+
+    let memory = JSON.parse(localStorage.getItem("botMemory") || '{}');
+
+    function speak(text) {
+      const utter = new SpeechSynthesisUtterance(text);
+      synth.speak(utter);
+    }
+
+    function showTab(id) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-buttons button').forEach(b => b.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      event.target.classList.add('active');
+      if (id === 'memory') renderMemory();
+    }
+
+    function sendMessage() {
+      const input = document.getElementById("user-input");
+      const text = input.value.trim();
+      if (!text) return;
+      addMessage("user", text);
+      input.value = "";
+      respond(text);
+    }
+
+    function startListening() {
+      recognition.start();
+      recognition.onresult = (e) => {
+        document.getElementById("user-input").value = e.results[0][0].transcript;
+        sendMessage();
+      };
+    }
+
+    function addMessage(role, text) {
+      const msg = document.createElement("div");
+      msg.className = `message ${role}`;
+      msg.textContent = text;
+      chatBox.appendChild(msg);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function respond(text) {
+      const reply = memory[text.toLowerCase()] || `I don't know about "${text}" yet. Want to teach me?`;
+      addMessage("bot", reply);
+      speak(reply);
+    }
+
+    function renderMemory() {
+      memoryList.innerHTML = '';
+      for (const key in memory) {
+        const div = document.createElement('div');
+        div.className = 'memory-entry';
+        div.innerHTML = `<b>Q:</b> ${key}<br/><b>A:</b> ${memory[key]}<br/><button onclick="deleteMemory('${key}')">🗑 Delete</button>`;
+        memoryList.appendChild(div);
+      }
+    }
+
+    function deleteMemory(key) {
+      delete memory[key];
+      localStorage.setItem("botMemory", JSON.stringify(memory));
+      renderMemory();
+    }
+
+    function exportMemory() {
+      const blob = new Blob([JSON.stringify({
+        name: document.getElementById("bot-name").value,
+        personality: document.getElementById("personality").value,
+        memory
+      }, null, 2)], { type: "application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "NeuroForge_Memory.json";
+      link.click();
+    }
+
+    function importMemory(event) {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+      reader.onload = e => {
+        const data = JSON.parse(e.target.result);
+        memory = data.memory || {};
+        localStorage.setItem("botMemory", JSON.stringify(memory));
+        document.getElementById("bot-name").value = data.name || "NeuroForge";
+        document.getElementById("personality").value = data.personality || "neutral";
+        alert("Imported successfully!");
+      };
+      reader.readAsText(file);
+    }
+  </script></body>
+</html>
