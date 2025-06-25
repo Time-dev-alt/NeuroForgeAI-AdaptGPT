@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>NeuroForge - Speech Bot</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      height: 100vh;
+      padding: 20px;
+      background: #eef;
+    }
+
+    #chatWindow {
+      width: 90%;
+      height: 300px;
+      background: white;
+      border: 1px solid #ccc;
+      padding: 10px;
+      overflow-y: auto;
+      margin: 20px 0;
+    }
+
+    input, button, textarea {
+      padding: 10px;
+      font-size: 16px;
+      margin: 5px;
+    }
+
+    #backBtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+    }
+
+    #dataFeedInput {
+      width: 90%;
+      height: 100px;
+    }
+  </style>
+</head>
+<body>
+
+<button id="backBtn" onclick="location.href='NeuroForge BY TIME 1.25.html'">← Back to Chatbot</button>
+<h2>🎤 NeuroForge - Speech Assist AI</h2>
+
+<textarea id="dataFeedInput" placeholder="User: hello\nBot: Hi!\nBot: Hey!\nUser: bye\nBot: See you!"></textarea>
+<br>
+<button onclick="trainBot()">📥 Load Feed</button>
+<button onclick="loadFromStorage()">🔄 Reload Saved Feed</button>
+
+<div id="chatWindow"></div>
+
+<input type="text" id="userInput" placeholder="Say something...">
+<button onclick="speakMessage()">Send</button>
+
+<script>
+  let botLogic = {};
+
+  function trainBot() {
+    const input = document.getElementById("dataFeedInput").value.trim();
+    const lines = input.split('\n');
+    let currentUser = '';
+    botLogic = {};
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.toLowerCase().startsWith('user:')) {
+        currentUser = line.slice(5).trim().toLowerCase();
+        if (!botLogic[currentUser]) {
+          botLogic[currentUser] = [];
+        }
+      } else if (line.toLowerCase().startsWith('bot:') && currentUser) {
+        const botReply = line.slice(4).trim();
+        botLogic[currentUser].push(botReply);
+      }
+    }
+
+    // Save to localStorage for reuse
+    localStorage.setItem("neuroforge-datafeed", input);
+
+    const total = Object.keys(botLogic).length;
+    if (total > 0) {
+      log("System", `✅ Bot trained with ${total} triggers`);
+    } else {
+      log("System", `⚠️ No valid data found`);
+    }
+  }
+
+  function loadFromStorage() {
+    const saved = localStorage.getItem("neuroforge-datafeed");
+    if (saved) {
+      document.getElementById("dataFeedInput").value = saved;
+      trainBot();
+      log("System", "🔁 Loaded previous Data Feed from memory");
+    } else {
+      log("System", "⚠️ No saved Data Feed found");
+    }
+  }
+
+  function speakMessage() {
+    const input = document.getElementById("userInput").value.trim();
+    if (!input) return;
+
+    log("You", input);
+    document.getElementById("userInput").value = "";
+
+    const key = input.toLowerCase();
+    let reply;
+
+    if (botLogic[key] && botLogic[key].length) {
+      const responses = botLogic[key];
+      reply = responses[Math.floor(Math.random() * responses.length)];
+    } else {
+      reply = "Sorry, I don't know that yet.";
+    }
+
+    log("Bot", reply);
+    speak(reply);
+  }
+
+  function speak(text) {
+    const synth = window.speechSynthesis;
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "en-US";
+    synth.speak(utter);
+  }
+
+  function log(sender, message) {
+    const div = document.createElement("div");
+    div.innerHTML = `<b>${sender}:</b> ${message}`;
+    document.getElementById("chatWindow").appendChild(div);
+    document.getElementById("chatWindow").scrollTop = 9999;
+  }
+
+  // Auto-load saved feed on page load
+  window.onload = loadFromStorage;
+</script>
+
+</body>
+</html>

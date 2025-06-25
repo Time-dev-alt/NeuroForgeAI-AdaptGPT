@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NeuroForge AI with ElevenLabs</title>
+<style>
+  body {
+    background: #0f172a;
+    color: #f1f5f9;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0; padding: 0;
+    text-align: center;
+  }
+  .container {
+    max-width: 600px;
+    margin: auto;
+    padding: 20px;
+  }
+  h1 {
+    color: #38bdf8;
+  }
+  #avatar-container {
+    margin-bottom: 15px;
+  }
+  #avatar-face {
+    width: 250px;
+    border-radius: 20px;
+    box-shadow: 0 0 15px #38bdf8;
+  }
+  #chatBox {
+    background: #1e293b;
+    padding: 15px;
+    border-radius: 10px;
+    height: 300px;
+    overflow-y: auto;
+    margin-top: 10px;
+    text-align: left;
+  }
+  select {
+    margin-bottom: 10px;
+    padding: 8px;
+    border-radius: 8px;
+  }
+  .message {
+    margin: 5px 0;
+  }
+  .message strong {
+    color: #38bdf8;
+  }
+  #textInputContainer {
+    margin-top: 10px;
+  }
+  #textInput {
+    width: 80%;
+    padding: 10px;
+    border-radius: 8px;
+    border: none;
+    font-size: 16px;
+  }
+  #sendBtn {
+    padding: 10px 15px;
+    margin-left: 5px;
+    border-radius: 8px;
+    border: none;
+    background-color: #38bdf8;
+    color: #0f172a;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  #sendBtn:hover {
+    background-color: #22aaff;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧠 NeuroForge AI</h1>
+    <select id="personality" title="Choose Personality">
+      <option value="neutral">Neutral</option>
+      <option value="funny">Funny</option>
+      <option value="wise">Wise</option>
+      <option value="chill">Chill</option>
+    </select>
+    <div id="avatar-container">
+      <img id="avatar-face" src="idle.gif" alt="NeuroForge Avatar" />
+    </div>
+    <div id="chatBox"></div>
+    <p>Listening for other AI or your voice...</p>
+
+    <div id="textInputContainer">
+      <input type="text" id="textInput" placeholder="Type your message here (optional)" autocomplete="off" />
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+
+<script>
+  // Your ElevenLabs API Key (DO NOT SHARE PUBLICLY!)
+  const ELEVENLABS_API_KEY = "sk_fceb619a6b4562501b5cc5687823d55267860b82c652c1fe";
+
+  // Responses loaded from JSON file
+  // AI memory
+  let memory = {};
+
+  // Load responses embedded directly here
+  const responses = {
+    "hi": "Hello there!",
+    "hello": "Hey! How can I help?",
+    "hey": "Hi! What can I do for you?",
+    "good morning": "Good morning! Hope you have a great day.",
+    "good afternoon": "Good afternoon! How's your day going?",
+    "good evening": "Good evening! What are you up to?",
+    "i am good": "Nice! Same here!",
+    "yo": "Yo bro how are you?",
+    "bye": "Goodbye! Talk to you later.",
+    "goodbye": "See you soon! Have a nice day.",
+    "see you": "Catch you later!",
+    "talk to you later": "Looking forward to our next chat!",
+    "thank you": "You're welcome!",
+    "thanks": "Anytime! Glad to help.",
+    "please": "Of course, happy to assist.",
+    "sorry": "No worries, it's all good.",
+    "how are you": "I’m feeling smart and ready. You?",
+    "what's up": "Just here, ready to assist you.",
+    "what are you doing": "Thinking about how to help you better!",
+    "how is the weather": "I don’t have weather info right now, but I hope it’s nice where you are.",
+    "who are you": "I'm NeuroForge, your personal AI assistant.",
+    "what is your name": "I'm NeuroForge. You can call me Forge!",
+    "are you real": "I’m as real as the code that runs me!",
+    "are you a robot": "Yes, a friendly AI robot at your service.",
+    "what time is it": `Sorry, I can't check the time right now.`,
+    "what is the date": `I don't have the current date at the moment.`,
+    "can you help me": "Absolutely! What do you need help with?",
+    "can you do math": "I can help with simple math if you ask!",
+    "tell me a joke": "Why did the programmer quit his job? Because he didn't get arrays.",
+    "do you like music": "I enjoy the sound of data flowing.",
+    "are you funny": "I try my best to be funny!",
+    "thank you very much": "You're very welcome!",
+    "no thanks": "Alright, just let me know if you need anything.",
+    "good luck": "Thanks! Wishing you the same.",
+    "default": "I’m not sure about that. Want me to search the web for you?"
+  };
+
+  window.onload = () => {
+    const saved = localStorage.getItem("neuroforge_memory");
+    if (saved) memory = JSON.parse(saved);
+    recognition.start();
+    fetchVoices();  // Load voices on start
+  };
+
+  window.onbeforeunload = () => {
+    localStorage.setItem("neuroforge_memory", JSON.stringify(memory));
+  };
+
+  const chatBox = document.getElementById("chatBox");
+  const personality = document.getElementById("personality");
+  const avatarFace = document.getElementById("avatar-face");
+  const textInput = document.getElementById("textInput");
+  const sendBtn = document.getElementById("sendBtn");
+
+  let isSpeaking = false;
+  let voices = [];
+  let voiceId = null;
+
+  // Speech Recognition Setup
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'en-US';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  recognition.onresult = async (event) => {
+    const userText = event.results[0][0].transcript;
+    addMessage("Other AI", userText);
+    const reply = await processInput(userText);
+    addMessage("NeuroForge", reply);
+    speak(reply);
+  };
+
+  recognition.onstart = () => {
+    setAvatarIdle();
+  };
+  recognition.onend = () => {
+    if (!isSpeaking) {
+      setAvatarIdle();
+      recognition.start();
+    }
+  };
+
+  function addMessage(sender, text) {
+    const el = document.createElement("div");
+    el.classList.add("message");
+    el.innerHTML = `<strong>${sender}:</strong> ${text}`;
+    chatBox.appendChild(el);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  function setAvatarIdle() {
+    avatarFace.src = "idle.gif"; // Your idle gif URL
+  }
+
+  function setAvatarSpeaking() {
+    avatarFace.src = "speaking.gif"; // Your speaking gif URL
+  }
+
+  async function fetchVoices() {
+    try {
+      const res = await fetch("https://api.elevenlabs.io/v1/voices", {
+        headers: {
+          "xi-api-key": ELEVENLABS_API_KEY
+        }
+      });
+      const data = await res.json();
+      voices = data.voices || [];
+      if (voices.length > 0) {
+        voiceId = voices[0].voice_id;
+        console.log("Using voice:", voices[0].name, voiceId);
+      } else {
+        console.warn("No voices found on ElevenLabs");
+      }
+    } catch (e) {
+      console.error("Error fetching ElevenLabs voices:", e);
+    }
+  }
+
+  async function speak(text) {
+    if (!voiceId) {
+      console.warn("No voiceId available, using browser TTS fallback.");
+      fallbackSpeak(text);
+      return;
+    }
+    isSpeaking = true;
+    setAvatarSpeaking();
+
+    try {
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "xi-api-key": ELEVENLABS_API_KEY
+        },
+        body: JSON.stringify({
+          text: text,
+          model_id: "eleven_monolingual_v1",
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+        })
+      });
+
+      if (!response.ok) throw new Error("ElevenLabs TTS API error");
+
+      const blob = await response.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      audio.onended = () => {
+        setAvatarIdle();
+        isSpeaking = false;
+        recognition.start();
+      };
+      audio.play();
+    } catch (err) {
+      console.error("ElevenLabs TTS error:", err);
+      fallbackSpeak(text);
+    }
+  }
+
+  function fallbackSpeak(text) {
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'en-US';
+    utter.onend = () => {
+      setAvatarIdle();
+      isSpeaking = false;
+      recognition.start();
+    };
+    speechSynthesis.speak(utter);
+  }
+
+  async function processInput(input) {
+    const lower = input.toLowerCase().trim();
+
+    // 1. Check built-in responses first
+    for (let key in responses) {
+      if (lower === key || lower.includes(key)) {
+        return responses[key];
+      }
+    }
+
+    // 2. Try math detection and evaluation
+    if (isMathQuestion(lower)) {
+      const mathExpr = extractMathExpression(lower);
+      if (mathExpr) {
+        try {
+          const result = safeEval(mathExpr);
+          return `The answer is ${result}`;
+        } catch {
+          return "Sorry, I couldn't calculate that.";
+        }
+      }
+    }
+
+    // 3. Memory learning
+    if (lower.startsWith("remember that")) {
+      const parts = lower.replace("remember that", "").trim().split(" is ");
+      if (parts.length === 2) {
+        memory[parts[0]] = parts[1];
+        return `Got it. I’ll remember that ${parts[0]} is ${parts[1]}.`;
+      }
+      return "Try saying it like: 'remember that X is Y'.";
+    }
+
+    // 4. Memory recall
+    if (lower.startsWith("what is") && memory[lower.replace("what is", "").trim()]) {
+      const key = lower.replace("what is", "").trim();
+      return `${key} is ${memory[key]}.`;
+    }
+
+    // 5. Fallback to DuckDuckGo search
+    return await fetchFromWeb(input);
+  }
+
+  // Simple math detection
+  function isMathQuestion(text) {
+    return /what is|calculate|solve|evaluate|plus|minus|times|divided by|\d/.test(text);
+  }
+
+  // Extract math expression from sentence
+  function extractMathExpression(text) {
+    let expr = text
+      .replace(/what is|calculate|solve|evaluate/gi, '')
+      .replace(/plus/gi, '+')
+      .replace(/minus/gi, '-')
+      .replace(/times|multiplied by/gi, '*')
+      .replace(/divided by|over/gi, '/')
+      .replace(/modulo|mod/gi, '%')
+      .replace(/[^\d\+\-\*\/\%\.\s]/g, '')
+      .trim();
+
+    return expr.length ? expr : null;
+  }
+
+  // Safe eval (basic arithmetic only)
+  function safeEval(expr) {
+    if (/[^-()\d/*+.%\s]/.test(expr)) throw new Error("Invalid characters");
+    return Function(`"use strict";return (${expr})`)();
+  }
+
+  async function fetchFromWeb(query) {
+    try {
+      const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1&no_html=1`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.AbstractText) {
+        return personalizeResponse(data.AbstractText, query);
+      } else if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+        return personalizeResponse(data.RelatedTopics[0].Text || "No details found", query);
+      } else {
+        return "I couldn't find anything useful on that.";
+      }
+    } catch {
+      return "Something went wrong while searching DuckDuckGo.";
+    }
+  }
+
+  function personalizeResponse(text, query) {
+    const tone = personality.value;
+    const base = `Here’s what I found about ${query}: ` + text;
+
+    switch (tone) {
+      case "funny":
+        return base + " 😂 Now that’s brain food!";
+      case "wise":
+        return base + " 🧘‍♂️ Wisdom flows through me.";
+      case "chill":
+        return base + " 😎 Hope that answers it, no stress.";
+      default:
+        return base;
+    }
+  }
+
+  // Text input send button
+  sendBtn.addEventListener("click", async () => {
+    const text = textInput.value.trim();
+    if (!text) return;
+    addMessage("You (text input)", text);
+    textInput.value = "";
+    recognition.stop(); // stop listening while processing text input
+    const reply = await processInput(text);
+    addMessage("NeuroForge", reply);
+    speak(reply);
+  });
+
+  // Allow Enter to send text input
+  textInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+      sendBtn.click();
+      e.preventDefault();
+    }
+  });
+</script>
+</body>
+</html>

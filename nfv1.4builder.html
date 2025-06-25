@@ -1,0 +1,116 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NeuroForge AI - All In One</title>
+  <style>
+    body { font-family: sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; }
+    h1 { color: #38bdf8; }
+    textarea { width: 100%; height: 120px; background: #1e293b; color: #f8fafc; padding: 10px; border: none; border-radius: 10px; margin: 10px 0; }
+    button, input[type="file"] { margin: 5px; padding: 10px; border-radius: 8px; border: none; background: #38bdf8; color: #0f172a; cursor: pointer; }
+    #exportOutputs { white-space: pre-wrap; background: #1e293b; padding: 10px; border-radius: 10px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>🧠 NeuroForge AI - All In One</h1>  <h2>Manual Response Input</h2>
+  <textarea id="manualInput" placeholder="User:Hi\nBot:Hello!\nBot:Hi there!\n\nUser:Bye\nBot:See you!\nBot:Goodbye!"></textarea>
+  <button onclick="parseManualResponses()">Load Manual Responses</button>  <h2>JSON Management</h2>
+  <button onclick="downloadJSON()">Download Responses JSON</button>
+  <input type="file" id="uploadFile" accept="application/json" onchange="uploadJSON(event)" />  <h2>Exports</h2>
+  <button onclick="downloadInoSketch()">Export & Download Arduino .ino</button>
+  <button onclick="downloadMicroPython()">Export MicroPython</button>
+  <button onclick="exportPython()">Export to Python</button>
+  <button onclick="exportVoicePython()">Export Python w/ Voice</button>  <div id="exportOutputs"></div>  <script>
+    let responses = {};
+
+    function parseManualResponses() {
+      const text = document.getElementById("manualInput").value;
+      const lines = text.split(/\r?\n/);
+      let currentUser = null;
+      responses = {};
+
+      lines.forEach(line => {
+        if (line.toLowerCase().startsWith("user:")) {
+          currentUser = line.substring(5).trim().toLowerCase();
+          responses[currentUser] = [];
+        } else if (line.toLowerCase().startsWith("bot:") && currentUser) {
+          responses[currentUser].push(line.substring(4).trim());
+        }
+      });
+
+      alert("Manual responses loaded successfully.");
+    }
+
+    function downloadJSON() {
+      const blob = new Blob([JSON.stringify(responses, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "responses.json";
+      a.click();
+    }
+
+    function uploadJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          responses = JSON.parse(e.target.result);
+          alert("Responses JSON loaded.");
+        } catch (err) {
+          alert("Invalid JSON file.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function downloadInoSketch() {
+      let ino = `String getResponse(String input) {\n`;
+      for (let key in responses) {
+        ino += `  if (input == "${key}") return "${responses[key][0]}";\n`;
+      }
+      ino += `  return "I don't know that one.";\n}\n\nvoid setup() {\n  Serial.begin(9600);\n  Serial.println("NeuroForge ready");\n}\n\nvoid loop() {\n  if (Serial.available()) {\n    String input = Serial.readStringUntil('\n');\n    input.trim();\n    String response = getResponse(input);\n    Serial.println(response);\n  }\n}`;
+      const blob = new Blob([ino], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "neuroforge_ai.ino";
+      a.click();
+    }
+
+    function downloadMicroPython() {
+      let py = `responses = {\n`;
+      for (let key in responses) {
+        py += `    "${key}": "${responses[key][0]}",\n`;
+      }
+      py += `}\n\nimport sys\nwhile True:\n    print(\"You: \", end=\"\")\n    input_str = sys.stdin.readline().strip().lower()\n    if input_str in responses:\n        print(\"Bot:\", responses[input_str])\n    else:\n        print(\"Bot: I don't know that one.\")`;
+      const blob = new Blob([py], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "neuroforge_micropython.py";
+      a.click();
+    }
+
+    function exportPython() {
+      let py = "def get_response(input):\n    responses = {\n";
+      for (let key in responses) {
+        py += `        "${key}": "${responses[key][0]}",\n`;
+      }
+      py += "    }\n    return responses.get(input.lower(), \"I don't know that one.\")";
+      document.getElementById("exportOutputs").innerText = py;
+    }
+
+    function exportVoicePython() {
+      let libs = "# Required libraries:\n# pip install speechrecognition pyttsx3 pyaudio\n\n";
+      let dict = "responses = {\n";
+      for (let key in responses) {
+        dict += `    "${key}": ${JSON.stringify(responses[key])},\n`;
+      }
+      dict += "}\n";
+
+      let code = `import speech_recognition as sr\nimport pyttsx3\nimport random\n\n${dict}\n
+def speak(text):\n    engine = pyttsx3.init()\n    engine.say(text)\n    engine.runAndWait()\n\ndef listen_and_respond():\n    r = sr.Recognizer()\n    with sr.Microphone() as source:\n        print(\"Listening...\")\n        audio = r.listen(source)\n    try:\n        command = r.recognize_google(audio).lower()\n        print(\"You said:\", command)\n        if command in responses:\n            reply = random.choice(responses[command])\n            print(\"Bot:\", reply)\n            speak(reply)\n        else:\n            speak(\"I don't know that one.\")\n    except:\n        speak(\"Sorry, I didn’t catch that.\")\n\nlisten_and_respond()`;
+
+      document.getElementById("exportOutputs").innerText = libs + code;
+    }
+  </script></body>
+</html>

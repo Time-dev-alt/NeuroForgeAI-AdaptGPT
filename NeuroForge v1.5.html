@@ -1,0 +1,168 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CodeBot v1.2</title>
+  <style>
+    body {
+      background: #0f172a;
+      color: #f8fafc;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      color: #38bdf8;
+    }
+    select, button {
+      padding: 10px;
+      margin: 10px;
+      border-radius: 8px;
+      border: none;
+      font-size: 16px;
+    }
+    #codeDisplay {
+      background: #1e293b;
+      padding: 15px;
+      border-radius: 10px;
+      text-align: left;
+      white-space: pre-wrap;
+      overflow-x: auto;
+      max-height: 400px;
+      margin: 20px auto;
+    }
+    #explanation {
+      margin-top: 15px;
+      color: #94a3b8;
+    }
+    .btns {
+      margin-top: 10px;
+    }
+    .btns button {
+      background-color: #38bdf8;
+      color: #0f172a;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>🤖 CodeBot v1.2</h1>
+  <select id="language">
+    <option value="python">Python</option>
+    <option value="javascript">JavaScript</option>
+    <option value="html">HTML/CSS</option>
+    <option value="cpp">C++</option>
+  </select>
+  <select id="project"></select>
+  <div class="btns">
+    <button onclick="generateCode()">Generate Code</button>
+    <button onclick="copyCode()">Copy</button>
+    <button onclick="downloadCode()">Download</button>
+  </div>
+  <div id="codeDisplay"></div>
+  <div id="explanation"></div>  <script>
+    const codeData = {
+      python: {
+        "Calculator": {
+          code: `def add(a, b):\n    return a + b\n\nprint(add(5, 3))`,
+          explanation: "A simple add function that returns the sum of two numbers."
+        },
+        "Todo List": {
+          code: `tasks = []\ntasks.append("Buy milk")\nprint("Tasks:", tasks)`,
+          explanation: "Basic task list using Python lists."
+        },
+        "Factorial": {
+          code: `def factorial(n):\n    return 1 if n == 0 else n * factorial(n-1)\n\nprint(factorial(5))`,
+          explanation: "Recursive function to calculate factorial."
+        },
+        "Fibonacci": {
+          code: `a, b = 0, 1\nfor _ in range(10):\n    print(a)\n    a, b = b, a + b`,
+          explanation: "Generates first 10 numbers of the Fibonacci sequence."
+        },
+        "Palindrome Checker": {
+          code: `word = "level"\nprint("Palindrome" if word == word[::-1] else "Not a palindrome")`,
+          explanation: "Checks if a string is a palindrome."
+        },
+        "Prime Checker": {
+          code: `num = 7\nif all(num % i != 0 for i in range(2, num)):\n    print("Prime")\nelse:\n    print("Not Prime")`,
+          explanation: "Checks if a number is prime."
+        },
+        "Simple Web Scraper": {
+          code: `import requests\nfrom bs4 import BeautifulSoup\nr = requests.get('https://example.com')\nsoup = BeautifulSoup(r.text, 'html.parser')\nprint(soup.title.text)`,
+          explanation: "Scrapes the title from a webpage."
+        },
+        "File Reader": {
+          code: `with open("file.txt", "r") as file:\n    print(file.read())`,
+          explanation: "Reads content from a text file."
+        },
+        "Simple ChatBot": {
+          code: `while True:\n    msg = input("You: ")\n    if msg == "hi": print("Hello!")\n    elif msg == "bye": break`,
+          explanation: "Simple if-else based chatbot."
+        },
+        "Guess the Number": {
+          code: `import random\nn = random.randint(1, 10)\nguess = int(input("Guess: "))\nprint("Correct!" if guess == n else f"Wrong! It was {n}")`,
+          explanation: "Random number guessing game."
+        }
+      }
+    };
+
+    const languageSelect = document.getElementById("language");
+    const projectSelect = document.getElementById("project");
+    const codeDisplay = document.getElementById("codeDisplay");
+    const explanation = document.getElementById("explanation");
+
+    function updateProjects() {
+      const lang = languageSelect.value;
+      const projects = codeData[lang];
+      projectSelect.innerHTML = '';
+      for (let title in projects) {
+        const opt = document.createElement("option");
+        opt.value = title;
+        opt.textContent = title;
+        projectSelect.appendChild(opt);
+      }
+    }
+
+    function typeOut(text, target, callback) {
+      target.textContent = '';
+      let i = 0;
+      const interval = setInterval(() => {
+        target.textContent += text.charAt(i);
+        i++;
+        if (i >= text.length) {
+          clearInterval(interval);
+          if (callback) callback();
+        }
+      }, 10);
+    }
+
+    function generateCode() {
+      const lang = languageSelect.value;
+      const proj = projectSelect.value;
+      const { code, explanation: explain } = codeData[lang][proj];
+      typeOut(code, codeDisplay, () => {
+        explanation.textContent = explain;
+      });
+    }
+
+    function copyCode() {
+      navigator.clipboard.writeText(codeDisplay.textContent);
+      alert("Code copied!");
+    }
+
+    function downloadCode() {
+      const lang = languageSelect.value;
+      const proj = projectSelect.value;
+      const blob = new Blob([codeDisplay.textContent], { type: "text/plain" });
+      const link = document.createElement("a");
+      const extMap = { python: 'py', javascript: 'js', html: 'html', cpp: 'cpp' };
+      link.href = URL.createObjectURL(blob);
+      link.download = proj.replace(/\s+/g, '_').toLowerCase() + "." + extMap[lang];
+      link.click();
+    }
+
+    languageSelect.addEventListener("change", updateProjects);
+    updateProjects();
+  </script></body>
+</html>

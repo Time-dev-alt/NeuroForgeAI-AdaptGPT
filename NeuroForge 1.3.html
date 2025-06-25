@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>NeuroForge - Info Upload</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: row;
+      height: 100vh;
+    }
+
+    #leftPanel {
+      width: 40%;
+      padding: 20px;
+      background: #f0f0f0;
+      box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    #rightPanel {
+      width: 60%;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    textarea {
+      flex: 1;
+      width: 100%;
+      resize: none;
+      font-size: 14px;
+      padding: 10px;
+    }
+
+    button {
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    #chatWindow {
+      flex: 1;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background: white;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+
+    #userInput {
+      display: flex;
+    }
+
+    #messageInput {
+      flex: 1;
+      padding: 10px;
+    }
+
+    label {
+      margin-top: 10px;
+    }
+
+    .top-buttons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+
+<div id="leftPanel">
+  <h3>🧠 Data Feed</h3>
+  <textarea id="dataFeedInput" placeholder="User: hello\nBot: Hi!\nBot: Hey!\nUser: bye\nBot: See you!"></textarea>
+  <div class="top-buttons">
+    <button onclick="trainBotFromData()">Train Bot</button>
+    <button onclick="exportToArduino()">Export to Arduino</button>
+    <button onclick="saveDataFeed()">💾 Save Feed</button>
+    <button onclick="document.getElementById('loadInput').click()">📂 Load Feed</button>
+    <button onclick="location.href='NeuroForge Speech.html'">🎤 Speech Bot</button>
+  </div>
+  <input type="file" id="loadInput" style="display:none" accept=".json" onchange="loadDataFeed(event)">
+  <label><input type="checkbox" id="infoCheckbox"> Enable Information Upload (Wikipedia)</label>
+</div>
+
+<div id="rightPanel">
+  <h3>💬 Chat</h3>
+  <div id="chatWindow"></div>
+  <div id="userInput">
+    <input type="text" id="messageInput" placeholder="Say something..." disabled>
+    <button onclick="sendMessage()" id="sendBtn" disabled>Send</button>
+  </div>
+</div>
+
+<script>
+  let botLogic = {};
+
+  function trainBotFromData() {
+    const input = document.getElementById("dataFeedInput").value.trim();
+    const lines = input.split('\n');
+    let currentUser = '';
+    botLogic = {};
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.toLowerCase().startsWith('user:')) {
+        currentUser = line.slice(5).trim().toLowerCase();
+        if (!botLogic[currentUser]) {
+          botLogic[currentUser] = [];
+        }
+      } else if (line.toLowerCase().startsWith('bot:') && currentUser) {
+        const botReply = line.slice(4).trim();
+        botLogic[currentUser].push(botReply);
+      }
+    }
+
+    const totalPairs = Object.keys(botLogic).length;
+    if (totalPairs > 0) {
+      document.getElementById("messageInput").disabled = false;
+      document.getElementById("sendBtn").disabled = false;
+      logMessage("System", `✅ Bot trained with ${totalPairs} triggers`);
+    } else {
+      logMessage("System", "⚠️ No valid User:Bot pairs found.");
+    }
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById("messageInput").value.trim();
+    if (!input) return;
+    logMessage("You", input);
+    document.getElementById("messageInput").value = "";
+
+    const responses = botLogic[input.toLowerCase()];
+    if (responses && responses.length) {
+      const reply = responses[Math.floor(Math.random() * responses.length)];
+      logMessage("Bot", reply);
+    } else {
+      const infoEnabled = document.getElementById("infoCheckbox").checked;
+      if (infoEnabled) {
+        logMessage("Bot", "🔍 Searching...");
+        const wikiSummary = await fetchWikipediaSummary(input);
+        logMessage("Bot", wikiSummary || "❌ Couldn't find info.");
+      } else {
+        logMessage("Bot", "🤖 I don't understand that yet.");
+      }
+    }
+  }
+
+  function logMessage(sender, text) {
+    const div = document.createElement("div");
+    div.innerHTML = `<b>${sender}:</b> ${text}`;
+    document.getElementById("chatWindow").appendChild(div);
+    document.getElementById("chatWindow").scrollTop = 9999;
+  }
+
+  async function fetchWikipediaSummary(query) {
+    try {
+      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.extract || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function exportToArduino() {
+    let code = `
+String input = "";
+void setup() {
+  Serial.begin(9600);
+}
+
+void loop() {
+  if (Serial.available()) {
+    input = Serial.readStringUntil('\\n');
+    input.trim();
+`.trim();
+
+    for (const user in botLogic) {
+      const responses = botLogic[user];
+      const escapedUser = user.replace(/"/g, '\\"');
+      code += `\n    if (input == "${escapedUser}") {\n`;
+      if (responses.length === 1) {
+        code += `      Serial.println("${responses[0].replace(/"/g, '\\"')}");\n`;
+      } else {
+        code += `      int r = random(0, ${responses.length});\n`;
+        for (let i = 0; i < responses.length; i++) {
+          code += `      if (r == ${i}) Serial.println("${responses[i].replace(/"/g, '\\"')}");\n`;
+        }
+      }
+      code += `    }`;
+    }
+
+    code += `
+  }
+}
+`;
+
+    const blob = new Blob([code], { type: 'text/plain' });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "NeuroForgeBot.ino";
+    a.click();
+  }
+
+  function saveDataFeed() {
+    const dataFeed = document.getElementById("dataFeedInput").value;
+    const blob = new Blob([JSON.stringify({ dataFeed })], { type: 'application/json' });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "NeuroForgeData.nf.json";
+    a.click();
+  }
+
+  function loadDataFeed(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const obj = JSON.parse(e.target.result);
+        if (obj.dataFeed) {
+          document.getElementById("dataFeedInput").value = obj.dataFeed;
+          trainBotFromData();
+          logMessage("System", `📂 Loaded and trained from file`);
+        } else {
+          logMessage("System", `⚠️ Invalid file format`);
+        }
+      } catch (err) {
+        logMessage("System", `❌ Failed to load: ${err.message}`);
+      }
+    };
+    reader.readAsText(file);
+  }
+</script>
+
+</body>
+</html>
